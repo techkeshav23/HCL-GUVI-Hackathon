@@ -1,0 +1,313 @@
+{
+  "info": {
+    "name": "AI Voice Detection API",
+    "description": "API for detecting AI-generated vs Human voices in Tamil, English, Hindi, Malayalam, Telugu",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "sk_test_123456789",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "Main API Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Voice Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Voice Detection",
+      "item": [
+        {
+          "name": "Detect Voice (English)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Detect Voice (Tamil)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"Tamil\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Detect Voice (Hindi)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"Hindi\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Detect Voice (Malayalam)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"Malayalam\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Detect Voice (Telugu)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"Telugu\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication Tests",
+      "item": [
+        {
+          "name": "Missing API Key (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Invalid API Key (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "invalid_key_12345"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validation Tests",
+      "item": [
+        {
+          "name": "Invalid Language",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"French\",\n  \"audioFormat\": \"mp3\",\n  \"audioBase64\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Missing Required Fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        },
+        {
+          "name": "Invalid Audio Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"English\",\n  \"audioFormat\": \"wav\",\n  \"audioBase64\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/voice-detection",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "voice-detection"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

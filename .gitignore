@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+*/venv/
+*/.venv/
+
+# Logs
+logs/
+*.log
+
+# Environment variables (IMPORTANT - contains API keys!)
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+
+# Audio files (temp)
+audio/temp/
+*.temp.mp3
+
+# Runtime
+.pids
+*.pid
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
