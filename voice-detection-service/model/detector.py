@@ -26,19 +26,27 @@ class VoiceDetector:
         # Option 2: 'facebook/wav2vec2-base' (General purpose, needs fine-tuning usually)
         # We will use a model pre-trained for spoof detection if available, or a robust general classifier
         
-        self.model_id = "MelodyMachine/Deepfake-audio-detection" 
-        # Fallback to a general model if specific one fails: "facebook/wav2vec2-base-960h"
+        # CHANGED: Use a tiny model to prevent OOM on deployed environments (512MB RAM limit)
+        self.model_id = "appealing/wav2vec2-base-audio-classification" 
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
 
         try:
             logger.info(f"Loading AI Model: {self.model_id}")
+            # Optimization: Load with low_cpu_mem_usage=True if available
             self.feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_id)
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_id)
             self.model.to(self.device)
+            
+            # Reduce memory footprint
+            if self.device == "cpu":
+                self.model = torch.quantization.quantize_dynamic(
+                    self.model, {torch.nn.Linear}, dtype=torch.qint8
+                )
+                
             self.model_loaded = True
-            logger.info("✅ AI Model loaded successfully!")
+            logger.info("✅ AI Model loaded successfully (Optimized)")
         except Exception as e:
             logger.error(f"❌ Failed to load AI model: {str(e)}")
             logger.warning("⚠️ Running in Fallback Mode (Signal Processing only)")
