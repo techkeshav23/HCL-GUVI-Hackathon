@@ -4,31 +4,33 @@ Detect AI-generated vs human voices across 5 Indian languages.
 
 **Problem Statement:** AI-Generated Voice Detection  
 **Languages:** Tamil, English, Hindi, Malayalam, Telugu  
-**Architecture:** Microservices (Node.js + Python)
+**Architecture:** Python Flask (Unified API & ML Service)
 
 ---
 
 ## 🚀 Quick Start
 
-**Terminal 1 - Start Node.js API:**
+**1. Setup Python Environment:**
 ```bash
-cd node-api
-npm install
-npm start
+cd voice-detection-service
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+# source venv/bin/activate
 ```
 
-**Terminal 2 - Start Python Voice Service:**
+**2. Install Dependencies:**
 ```bash
-cd python-voice-service
-python -m venv venv
-venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+**3. Run the Service:**
+```bash
 python app.py
 ```
 
-Services will run at:
-- **API Gateway:** http://localhost:3000
-- **Voice Service:** http://localhost:5001
+The API will start at: `http://localhost:5001`
 
 ---
 
@@ -45,7 +47,7 @@ x-api-key: sk_test_123456789
 **POST** `/api/voice-detection`
 
 ```bash
-curl -X POST http://localhost:3000/api/voice-detection ^
+curl -X POST http://localhost:5001/api/voice-detection ^
   -H "Content-Type: application/json" ^
   -H "x-api-key: sk_test_123456789" ^
   -d "{\"language\": \"English\", \"audioFormat\": \"mp3\", \"audioBase64\": \"YOUR_BASE64_AUDIO_HERE\"}"
