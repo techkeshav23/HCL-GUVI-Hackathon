@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import torch
 import torch.nn.functional as F
+import os
 from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 from typing import Dict, Tuple
 
@@ -38,6 +39,9 @@ class VoiceDetector:
         self.feature_extractor = None
         self.model_loaded = False
         self.load_attempted = False
+        
+        # Check environment
+        self.is_render = os.environ.get('RENDER') == 'true'
 
     def _load_model(self):
         """
@@ -48,6 +52,16 @@ class VoiceDetector:
             return
 
         self.load_attempted = True
+        
+        # SAFETY CHECK: Render Free Tier has only 512MB RAM.
+        # Loading PyTorch + Transformers + App takes ~600MB+.
+        # To prevent 502 Crashes, we skip the heavy model on Render unless explicitly overrided.
+        if self.is_render and not os.environ.get('FORCE_LOAD_MODEL'):
+            logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load to prevent OOM/502 Crash.")
+            logger.warning("ℹ️ Using Lightweight Signal Processing Mode (Heuristics)")
+            self.model_loaded = False
+            return
+
         try:
             logger.info(f"Loading AI Model (Lazy): {self.model_id}")
             # Optimization: Restrict Torch threads to save memory
