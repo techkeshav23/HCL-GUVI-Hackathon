@@ -22,8 +22,8 @@ class VoiceDetector:
         self.supported_languages = ['Tamil', 'English', 'Hindi', 'Malayalam', 'Telugu']
         
         # Model Configuration
-        # Using a dedicated Deepfake Detection Model now that we have 16GB RAM (Hugging Face)
-        self.model_id = "mrfakename/xls-r-300m-mountains-finetuned-deepfake"
+        # Using a dedicated Deepfake Detection Model (Verified)
+        self.model_id = "MelodyMachine/Deepfake-audio-detection"
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
@@ -46,7 +46,6 @@ class VoiceDetector:
         self.load_attempted = True
         
         # NOTE: On Hugging Face Spaces, we have 16GB RAM, so we ALWAYS load the model.
-        # The Render check below is kept just in case you switch back to low-memory hosting.
         if self.is_render and not os.environ.get('FORCE_LOAD_MODEL'):
              logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load.")
              return
@@ -156,20 +155,19 @@ class VoiceDetector:
             confidence = probs[0][predicted_id].item()
             
             # Map robustly to our required output
-            # For 'mrfakename/xls-r-300m-mountains-finetuned-deepfake'
-            # id2label usually is {0: 'real', 1: 'fake'} OR {0: 'bonafide', 1: 'spoof'}
+            # For 'MelodyMachine/Deepfake-audio-detection':
+            # Label 0: Real
+            # Label 1: Fake
+            # We verify this via label mapping if available, or assume standard convention.
             
-            label = self.model.config.id2label[predicted_id].lower()
-            logger.info(f"Model Predicted: {label} ({confidence:.2f})")
-            
-            if "fake" in label or "spoof" in label:
-                return "AI_GENERATED", confidence
-            elif "real" in label or "bona" in label: # bona fide
-                return "HUMAN", confidence
+            label_map = self.model.config.id2label
+            predicted_label = label_map.get(predicted_id, str(predicted_id)).lower()
+            logger.info(f"Model Predicted ID: {predicted_id}, Label: {predicted_label}, Conf: {confidence:.2f}")
+
+            if "fake" in predicted_label or "spoof" in predicted_label or predicted_label == "1":
+                 return "AI_GENERATED", confidence
             else:
-                # Fallback based on ID if labels are ambiguous
-                # Most spoof models: 1 = Fake, 0 = Real
-                return "AI_GENERATED" if predicted_id == 1 else "HUMAN", confidence
+                 return "HUMAN", confidence
 
         except Exception as e:
             logger.error(f"AI Inference failed: {e}")
