@@ -22,19 +22,12 @@ class VoiceDetector:
         self.supported_languages = ['Tamil', 'English', 'Hindi', 'Malayalam', 'Telugu']
         
         # Model Configuration
-        # Using a lightweight, high-performance model for Deepfake detection
-        # Option 1: 'MelodyMachine/Deepfake-audio-detection' (Specific for this task)
-        # Option 2: 'facebook/wav2vec2-base' (General purpose, needs fine-tuning usually)
-        # We will use a model pre-trained for spoof detection if available, or a robust general classifier
-        
-        # CHANGED: Use the official lightweight Facebook model (guaranteed to exist)
-        self.model_id = "facebook/wav2vec2-base-960h"
+        # Using a dedicated Deepfake Detection Model now that we have 16GB RAM (Hugging Face)
+        self.model_id = "mrfakename/xls-r-300m-mountains-finetuned-deepfake"
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
         
-        # Initialize model variables but DON'T load yet (Lazy Loading)
-        # This prevents OOM (Out of Memory) errors during deployment startup on Render Free Tier
         self.model = None
         self.feature_extractor = None
         self.model_loaded = False
@@ -46,21 +39,17 @@ class VoiceDetector:
     def _load_model(self):
         """
         Load the model only when needed (Lazy Loading).
-        Includes memory protection and fallback logic.
         """
         if self.load_attempted:
             return
 
         self.load_attempted = True
         
-        # SAFETY CHECK: Render Free Tier has only 512MB RAM.
-        # Loading PyTorch + Transformers + App takes ~600MB+.
-        # To prevent 502 Crashes, we skip the heavy model on Render unless explicitly overrided.
+        # NOTE: On Hugging Face Spaces, we have 16GB RAM, so we ALWAYS load the model.
+        # The Render check below is kept just in case you switch back to low-memory hosting.
         if self.is_render and not os.environ.get('FORCE_LOAD_MODEL'):
-            logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load to prevent OOM/502 Crash.")
-            logger.warning("ℹ️ Using Lightweight Signal Processing Mode (Heuristics)")
-            self.model_loaded = False
-            return
+             logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load.")
+             return
 
         try:
             logger.info(f"Loading AI Model (Lazy): {self.model_id}")
@@ -71,16 +60,10 @@ class VoiceDetector:
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_id)
             self.model.to(self.device)
             
-            # Reduce memory footprint by 4x using Quantization
-            if self.device == "cpu":
-                self.model = torch.quantization.quantize_dynamic(
-                    self.model, {torch.nn.Linear}, dtype=torch.qint8
-                )
-                
             self.model_loaded = True
-            logger.info("✅ AI Model loaded successfully (Optimized)")
+            logger.info("✅ AI Model loaded successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to load AI model (likely Memory Limit): {str(e)}")
+            logger.error(f"❌ Failed to load AI model: {str(e)}")
             logger.warning("⚠️ Running in Fallback Mode (Signal Processing only)")
             self.model_loaded = False
 
@@ -168,22 +151,25 @@ class VoiceDetector:
             # Apply Softmax to get probabilities
             probs = F.softmax(logits, dim=-1)
             
-            # Get predicted class
+            # Get predicted class (0 or 1)
             predicted_id = torch.argmax(logits, dim=-1).item()
             confidence = probs[0][predicted_id].item()
             
-            # Check model labels mapping
-            # Typically: 0 -> Fake/Generated, 1 -> Real/Human OR vice versa depending on training
-            # For 'MelodyMachine/Deepfake-audio-detection': Label 0 = Fake, Label 1 = Real
-            
-            label_map = self.model.config.id2label
-            predicted_label = label_map[predicted_id]
-            
             # Map robustly to our required output
-            if "fake" in predicted_label.lower() or "spoof" in predicted_label.lower() or predicted_id == 0: # Adjust based on specific model
+            # For 'mrfakename/xls-r-300m-mountains-finetuned-deepfake'
+            # id2label usually is {0: 'real', 1: 'fake'} OR {0: 'bonafide', 1: 'spoof'}
+            
+            label = self.model.config.id2label[predicted_id].lower()
+            logger.info(f"Model Predicted: {label} ({confidence:.2f})")
+            
+            if "fake" in label or "spoof" in label:
                 return "AI_GENERATED", confidence
-            else:
+            elif "real" in label or "bona" in label: # bona fide
                 return "HUMAN", confidence
+            else:
+                # Fallback based on ID if labels are ambiguous
+                # Most spoof models: 1 = Fake, 0 = Real
+                return "AI_GENERATED" if predicted_id == 1 else "HUMAN", confidence
 
         except Exception as e:
             logger.error(f"AI Inference failed: {e}")
