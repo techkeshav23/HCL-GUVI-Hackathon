@@ -26,8 +26,8 @@ class VoiceDetector:
         # Option 2: 'facebook/wav2vec2-base' (General purpose, needs fine-tuning usually)
         # We will use a model pre-trained for spoof detection if available, or a robust general classifier
         
-        # CHANGED: Use a tiny model to prevent OOM on deployed environments (512MB RAM limit)
-        self.model_id = "appealing/wav2vec2-base-audio-classification" 
+        # CHANGED: Use the official lightweight Facebook model (guaranteed to exist)
+        self.model_id = "facebook/wav2vec2-base-960h"
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
@@ -39,7 +39,7 @@ class VoiceDetector:
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_id)
             self.model.to(self.device)
             
-            # Reduce memory footprint
+            # Reduce memory footprint by 4x using Quantization
             if self.device == "cpu":
                 self.model = torch.quantization.quantize_dynamic(
                     self.model, {torch.nn.Linear}, dtype=torch.qint8
