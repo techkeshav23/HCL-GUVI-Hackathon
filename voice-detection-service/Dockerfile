@@ -20,6 +20,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Download model during build to bake it into the image
+# This ensures we don't depend on external APIs/Internet at runtime
+RUN python utils/download_model.py
+
 # Create temp directory for audio files and set permissions
 RUN mkdir -p audio/temp && chmod 777 audio/temp
 

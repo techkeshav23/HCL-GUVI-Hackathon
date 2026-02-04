@@ -22,8 +22,14 @@ class VoiceDetector:
         self.supported_languages = ['Tamil', 'English', 'Hindi', 'Malayalam', 'Telugu']
         
         # Model Configuration
-        # Using a dedicated Deepfake Detection Model (Verified)
-        self.model_id = "MelodyMachine/Deepfake-audio-detection"
+        # Check if local baked model exists (Offline Mode), else use Hub
+        self.local_model_path = "./model/local_weights"
+        if os.path.exists(self.local_model_path) and os.path.exists(os.path.join(self.local_model_path, "config.json")):
+             logger.info(f"📁 Found local model at {self.local_model_path}. Using Offline Mode.")
+             self.model_id = self.local_model_path
+        else:
+             logger.info("☁️ Local model not found. Using Hugging Face Hub.")
+             self.model_id = "MelodyMachine/Deepfake-audio-detection"
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
@@ -46,8 +52,9 @@ class VoiceDetector:
         self.load_attempted = True
         
         # NOTE: On Hugging Face Spaces, we have 16GB RAM, so we ALWAYS load the model.
-        if self.is_render and not os.environ.get('FORCE_LOAD_MODEL'):
-             logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load.")
+        # Modified to ensure model loads unless explicitly disabled
+        if self.is_render and os.environ.get('DISABLE_MODEL_LOAD') == 'true':
+             logger.warning("⚠️ RENDER DETECTED: Skipping Heavy Model Load due to DISABLE_MODEL_LOAD.")
              return
 
         try:
@@ -55,8 +62,14 @@ class VoiceDetector:
             # Optimization: Restrict Torch threads to save memory
             torch.set_num_threads(1)
             
-            self.feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_id)
-            self.model = AutoModelForAudioClassification.from_pretrained(self.model_id)
+            self.feature_extractor = AutoFeatureExtractor.from_pretrained(
+                self.model_id, 
+                trust_remote_code=True
+            )
+            self.model = AutoModelForAudioClassification.from_pretrained(
+                self.model_id, 
+                trust_remote_code=True
+            )
             self.model.to(self.device)
             
             self.model_loaded = True
@@ -69,13 +82,6 @@ class VoiceDetector:
     def detect(self, audio_path: str, language: str) -> Dict:
         """
         Main detection method
-        
-        Args:
-            audio_path: Path to the audio file
-            language: Language of the audio
-            
-        Returns:
-            Dictionary with detection results
         """
         # Attempt to load model if not already done
         if not self.load_attempted:
@@ -85,8 +91,8 @@ class VoiceDetector:
             logger.info(f"Analyzing audio: {audio_path} in {language}")
 
             # 1. AI Model Prediction (Primary)
-            ai_confidence = 0.5
             ai_classification = "UNKNOWN"
+            ai_confidence = 0.5
             
             if self.model_loaded:
                 ai_classification, ai_confidence = self._predict_with_model(audio_path)
@@ -94,22 +100,57 @@ class VoiceDetector:
             # 2. Extract Signal Features (Secondary/Explanation)
             # Optimization: Load only first 10 seconds for feature extraction
             audio, sr = librosa.load(audio_path, sr=None, duration=10)
+            
+            # Trim silence for better acoustic feature extraction
+            audio_trimmed, _ = librosa.effects.trim(audio, top_db=20)
+            # Be careful not to trim everything if it's a quiet recording
+            if len(audio_trimmed) > len(audio) * 0.1:
+                audio = audio_trimmed
+
             features = self._extract_features(audio, sr)
             
             # 3. Heuristic Check (Fallback/Validation)
             heuristic_class, heuristic_conf = self._heuristic_check(features)
             
-            # 4. Final Decision Logic (Hybrid)
+            # 4. Final Decision Logic (Ensemble)
             final_class = ai_classification
             final_conf = ai_confidence
 
-            # If model is not loaded or very unsure, use heuristics
-            if not self.model_loaded or (0.4 < ai_confidence < 0.6):
-                logger.info("Using heuristic fallback or refining weak model prediction")
+            # If model isn't loaded, rely on heuristics
+            if not self.model_loaded:
+                logger.info("Using heuristic fallback (Model not loaded)")
                 final_class = heuristic_class
                 final_conf = heuristic_conf
+            else:
+                # Weighted Ensemble Logic
+                # Convert everything to "AI Probability" for simpler math
+                
+                # Model Score (0.0=Human, 1.0=AI)
+                if ai_classification == 'AI_GENERATED':
+                    model_ai_score = ai_confidence
+                else:
+                    model_ai_score = 1.0 - ai_confidence
+                
+                # Heuristic Score (0.0=Human, 1.0=AI)
+                if heuristic_class == 'AI_GENERATED':
+                    heur_ai_score = heuristic_conf
+                else:
+                    heur_ai_score = 1.0 - heuristic_conf
+                
+                # Weights: Model 70%, Heuristics 30%
+                # This ensures that strong model predictions aren't easily overturned,
+                # but strong heuristic signals can help marginal cases.
+                combined_ai_score = (model_ai_score * 0.7) + (heur_ai_score * 0.3)
+                
+                if combined_ai_score > 0.5:
+                    final_class = 'AI_GENERATED'
+                    # Map 0.5-1.0 to confidence
+                    final_conf = 0.5 + (combined_ai_score - 0.5)
+                else:
+                    final_class = 'HUMAN'
+                    final_conf = 0.5 + (0.5 - combined_ai_score)
             
-            # Generate explanation based on features corresponding to the decision
+            # Generate explanation based on key features
             explanation = self._generate_explanation(features, final_class)
 
             result = {
@@ -150,21 +191,31 @@ class VoiceDetector:
             # Apply Softmax to get probabilities
             probs = F.softmax(logits, dim=-1)
             
-            # Get predicted class (0 or 1)
+            # Get predicted class
             predicted_id = torch.argmax(logits, dim=-1).item()
             confidence = probs[0][predicted_id].item()
             
-            # Map robustly to our required output
-            # For 'MelodyMachine/Deepfake-audio-detection':
-            # Label 0: Real
-            # Label 1: Fake
-            # We verify this via label mapping if available, or assume standard convention.
-            
+            # Map robustly
             label_map = self.model.config.id2label
             predicted_label = label_map.get(predicted_id, str(predicted_id)).lower()
+            
             logger.info(f"Model Predicted ID: {predicted_id}, Label: {predicted_label}, Conf: {confidence:.2f}")
 
-            if "fake" in predicted_label or "spoof" in predicted_label or predicted_label == "1":
+            # Logic for MelodyMachine and similar 2-class models
+            # Often: 0=fake, 1=real OR "fake", "real" labels
+            is_fake = False
+            
+            if "fake" in predicted_label or "spoof" in predicted_label:
+                is_fake = True
+            elif "real" in predicted_label or "bonafide" in predicted_label:
+                is_fake = False
+            elif predicted_label == "0": 
+                # Fallback: Index 0 is sometimes fake in deepfake datasets
+                is_fake = True 
+            elif predicted_label == "1":
+                is_fake = False
+            
+            if is_fake:
                  return "AI_GENERATED", confidence
             else:
                  return "HUMAN", confidence
@@ -180,11 +231,14 @@ class VoiceDetector:
         features = {}
 
         try:
+            # MFCC (Timbre/Cepstral Analysis)
+            # Real voices often have higher variance in certain MFCC coefficients
+            mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
+            features['mfcc_std_mean'] = np.mean(np.std(mfcc, axis=1))
+
             # Pitch analysis
             pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
-            pitch_values = []
-            # Optimization: Vectorized operation instead of loop
-            # Take max magnitude per frame
+            # Optimization: Take max magnitude per frame
             max_mags = magnitudes.max(axis=0)
             # Thresholding
             mask = max_mags > np.median(max_mags)
@@ -196,7 +250,8 @@ class VoiceDetector:
                 if len(valid_pitches) > 0:
                     features['pitch_mean'] = np.mean(valid_pitches)
                     features['pitch_std'] = np.std(valid_pitches)
-                    features['pitch_consistency'] = 1.0 - (features['pitch_std'] / features['pitch_mean'])
+                    # Safe division
+                    features['pitch_consistency'] = 1.0 - (features['pitch_std'] / (features['pitch_mean'] + 1e-6))
                 else:
                     features['pitch_mean'], features['pitch_std'], features['pitch_consistency'] = 0, 0, 0
             else:
@@ -210,18 +265,16 @@ class VoiceDetector:
             zcr = librosa.feature.zero_crossing_rate(audio)[0]
             features['zcr_std'] = np.std(zcr)
 
-            # RMS energy
-            rms = librosa.feature.rms(y=audio)[0]
-            features['rms_std'] = np.std(rms)
-
             return features
 
         except Exception as e:
             logger.error(f"Feature extraction error: {str(e)}")
             # Return safe averages
             return {
-                'pitch_consistency': 0.5, 'spectral_centroid_std': 1000, 
-                'zcr_std': 0.1, 'rms_std': 0.1
+                'pitch_consistency': 0.5, 
+                'spectral_centroid_std': 1000, 
+                'zcr_std': 0.1, 
+                'mfcc_std_mean': 30
             }
 
     def _heuristic_check(self, features: Dict) -> Tuple[str, float]:
@@ -232,15 +285,18 @@ class VoiceDetector:
             ai_score = 0.0
             
             # Logic: AI voices are "too perfect" (low variance, high consistency)
-            if features.get('pitch_consistency', 0) > 0.85: ai_score += 0.4
-            if features.get('spectral_centroid_std', 1000) < 500: ai_score += 0.3
+            if features.get('pitch_consistency', 0) > 0.85: ai_score += 0.3
+            if features.get('spectral_centroid_std', 1000) < 500: ai_score += 0.2
             if features.get('zcr_std', 0.1) < 0.05: ai_score += 0.2
             
-            if ai_score > 0.5:
-                # Add randomness to confidence to look realistic
-                return 'AI_GENERATED', min(0.95, 0.6 + ai_score/2)
+            # MFCC Heuristic: Synthetic voices often have lower variance in cepstral coeffs
+            # Real human voice has high complexity (high std dev mean usually > 10-15)
+            if features.get('mfcc_std_mean', 20) < 10.0: ai_score += 0.3
+            
+            if ai_score > 0.4:
+                return 'AI_GENERATED', min(0.95, 0.55 + ai_score/2.5)
             else:
-                return 'HUMAN', min(0.98, 0.7 + (1-ai_score)/2)
+                return 'HUMAN', min(0.98, 0.6 + (1-ai_score)/2)
 
         except Exception:
             return "HUMAN", 0.65 # Default safe bias
@@ -251,18 +307,22 @@ class VoiceDetector:
         explanations = []
 
         if classification == 'AI_GENERATED':
-            if features.get('pitch_consistency', 0) > 0.80:
+            if features.get('pitch_consistency', 0) > 0.82:
                 explanations.append("Unnaturally consistent pitch patterns")
+            if features.get('mfcc_std_mean', 20) < 12.0:
+                explanations.append("Synthetic timbre characteristics detected")
             if features.get('spectral_centroid_std', 1000) < 600:
                 explanations.append("Lack of natural spectral variance")
             if not explanations:
-                explanations.append("Synthetic voice artifacts detected")
+                explanations.append("Deepfake artifacts identified in audio stream")
         else:  # HUMAN
-            if features.get('pitch_consistency', 0) < 0.75:
+            if features.get('pitch_consistency', 0) < 0.78:
                 explanations.append("Natural pitch modulation detected")
+            if features.get('mfcc_std_mean', 0) > 12.0:
+                explanations.append("Complex human vocal timbre")
             if features.get('spectral_centroid_std', 0) > 800:
-                explanations.append("Complex human vocal characteristics")
+                explanations.append("Organic spectral fluctuations")
             if not explanations:
-                explanations.append("Organic micro-tremors identified")
+                explanations.append("Human vocal micro-tremors identified")
 
         return " and ".join(explanations)

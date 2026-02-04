@@ -29,8 +29,9 @@ def test_api():
         return
 
     # 3. Prepare Payload
+    # Change this to match your audio language (Tamil, English, Hindi, Malayalam, Telugu)
     payload = {
-        "language": "English",
+        "language": "Hindi", 
         "audioFormat": "mp3",
         "audioBase64": encoded_string
     }
