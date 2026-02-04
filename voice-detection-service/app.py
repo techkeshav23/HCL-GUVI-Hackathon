@@ -90,6 +90,15 @@ def validate_voice_request(data):
 
 # ==================== ROUTES ====================
 
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint"""
+    return jsonify({
+        'status': 'online',
+        'message': 'AI Voice Detection API is running. Use POST /api/voice-detection to detect voices.',
+        'documentation': 'See README.md for usage details'
+    }), 200
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

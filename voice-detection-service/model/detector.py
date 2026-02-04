@@ -31,10 +31,28 @@ class VoiceDetector:
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
+        
+        # Initialize model variables but DON'T load yet (Lazy Loading)
+        # This prevents OOM (Out of Memory) errors during deployment startup on Render Free Tier
+        self.model = None
+        self.feature_extractor = None
+        self.model_loaded = False
+        self.load_attempted = False
 
+    def _load_model(self):
+        """
+        Load the model only when needed (Lazy Loading).
+        Includes memory protection and fallback logic.
+        """
+        if self.load_attempted:
+            return
+
+        self.load_attempted = True
         try:
-            logger.info(f"Loading AI Model: {self.model_id}")
-            # Optimization: Load with low_cpu_mem_usage=True if available
+            logger.info(f"Loading AI Model (Lazy): {self.model_id}")
+            # Optimization: Restrict Torch threads to save memory
+            torch.set_num_threads(1)
+            
             self.feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_id)
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_id)
             self.model.to(self.device)
@@ -48,7 +66,7 @@ class VoiceDetector:
             self.model_loaded = True
             logger.info("✅ AI Model loaded successfully (Optimized)")
         except Exception as e:
-            logger.error(f"❌ Failed to load AI model: {str(e)}")
+            logger.error(f"❌ Failed to load AI model (likely Memory Limit): {str(e)}")
             logger.warning("⚠️ Running in Fallback Mode (Signal Processing only)")
             self.model_loaded = False
 
@@ -63,6 +81,10 @@ class VoiceDetector:
         Returns:
             Dictionary with detection results
         """
+        # Attempt to load model if not already done
+        if not self.load_attempted:
+            self._load_model()
+            
         try:
             logger.info(f"Analyzing audio: {audio_path} in {language}")
 
